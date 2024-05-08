@@ -64,116 +64,133 @@ or
     moduleinstaller.cli_check_and_prompt("pyserial pillow openpyxl==2.2")
 
 """
+class ModuleInstallerCore:
+    __version__ = 2024,5,8
 
-__version__ = 2024,3,25
+    def find_missing(self, install:str|dict=None):
+        if isinstance(install, dict):
+            return self.find_missing_via_imports(install)
+        else: # string, None, or Path
+            return self.find_missing_via_pip(install)
 
-def cli_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
-    if (modules := _find_missing(install)): # if modules are missing
-        if _show_cli(modules): # and if the user agrees
-            _install_cli(modules) # install missing modules from pip
-        if force_kill:
-            raise SystemExit
+    def find_missing_via_pip(self, install:str=None) -> dict:
+        import subprocess
+        import sys
+        from pathlib import Path
+        to_be_installed = []
+        if install is None:
+            req = Path(__file__).parent / "requirements.txt"
+            if req.exists():
+                install = req.read_text()
+            else:
+                raise FileNotFoundError(f"No module list supplied and no requirements.txt found at {req}")
+        resp = subprocess.run([sys.executable, '-m', 'pip', 'freeze'], capture_output=True)
+        installed = resp.stdout.decode().splitlines()
+        for modulename in install.strip().split():
+            if not any(line.startswith(modulename) for line in installed):
+                to_be_installed.append(modulename)
+        return to_be_installed
 
-def gui_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
-    if (modules := _find_missing(install)): # if modules are missing
-        if _show_gui(modules): # and if the user agrees
-            _install_gui(modules) # install missing modules from pip
-        if force_kill:
-            raise SystemExit
+    def find_missing_via_imports(self, install:dict) -> dict:
+        # install is a dict of  {importname:installname}
+        to_be_installed = []
+        for importname, installname in install.items():
+            try:
+                __import__(importname)
+            except (ImportError, ModuleNotFoundError):
+                to_be_installed.append(installname)
+        return to_be_installed
 
-def _find_missing(install:str|dict=None):
-    if isinstance(install, dict):
-        return _find_missing_via_imports(install)
-    else: # string, None, or Path
-        return _find_missing_via_pip(install)
+class ModuleInstallerGUI(ModuleInstallerCore):
+    def __init__(self, install:str|dict=None, force_kill:bool=True) -> None:
+        if (modules := self.find_missing(install)): # if modules are missing
+            if self.show_gui(modules): # and if the user agrees
+                self.install_gui(modules) # install missing modules from pip
+            if force_kill:
+                raise SystemExit
 
-def _find_missing_via_pip(install:str=None) -> dict:
-    import subprocess
-    import sys
-    from pathlib import Path
-    to_be_installed = []
-    if install is None:
-        req = Path(__file__).parent / "requirements.txt"
-        if req.exists():
-            install = req.read_text()
-        else:
-            raise FileNotFoundError(f"No module list supplied and no requirements.txt found at {req}")
-    resp = subprocess.run([sys.executable, '-m', 'pip', 'freeze'], capture_output=True)
-    installed = resp.stdout.decode().splitlines()
-    for modulename in install.strip().split():
-        if not any(line.startswith(modulename) for line in installed):
-            to_be_installed.append(modulename)
-    return to_be_installed
+    def show_gui(self, modules:list):
+        from tkinter import messagebox
+        return messagebox.askyesno(
+            "Missing modules", # window title
+            f"The following modules are missing:\n\n"
+            f"{modules}\n\nWould you like to install them now?")
 
-def _find_missing_via_imports(install:dict) -> dict:
-    # install is a dict of  {importname:installname}
-    to_be_installed = []
-    for importname, installname in install.items():
-        try:
-            __import__(importname)
-        except (ImportError, ModuleNotFoundError):
-            to_be_installed.append(installname)
-    return to_be_installed
+    def install_gui(self, modules:list):
+        from subprocess import Popen, PIPE
+        import sys
+        import threading
+        import tkinter as tk
+        from tkinter import ttk
+        from tkinter.scrolledtext import ScrolledText
 
-def _show_gui(modules:list):
-    from tkinter import messagebox
-    return messagebox.askyesno(
-        "Missing modules", # window title
-        f"The following modules are missing:\n\n"
-        f"{modules}\n\nWould you like to install them now?")
+        def pipe_reader(pipe, term=False):
+            for line in iter(pipe.readline, b''):
+                st.insert(tk.END, line)
+                st.see(tk.END)
+            if term:
+                tk.Label(root, fg='red', text="DONE. Restart required.", font=('bold',14)).pack()
+                ttk.Button(root, text="Exit program", command=sys.exit).pack()
+        def on_closing(*args):
+            print(args)
+            root.destroy()
+            root.quit()
+            sys.exit()
 
-def _show_cli(modules:list):
-    print("MISSING MODULES")
-    print("The following modules are missing:\n")
-    print(modules)
-    print("\nWould you like to install them now? [no]/yes")
-    return input().lower().startswith('y')
+        root = tk.Tk()
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        tk.Label(root, text=f'Installing: {", ".join(modules)}', font=('bold',14)).pack()
+        st= ScrolledText(root, width=60, height=12)
+        st.pack(expand=True, fill=tk.BOTH)
+        sub_proc = Popen([sys.executable, '-m', 'pip', 'install'] + modules, stdout=PIPE, stderr=PIPE)
+        threading.Thread(target=pipe_reader, args=[sub_proc.stdout]).start()
+        threading.Thread(target=pipe_reader, args=[sub_proc.stderr, True]).start()
+        root.mainloop()
 
-def _install_cli(modules:list):
-    import subprocess
-    import sys
+class ModuleInstallerCLI(ModuleInstallerCore):
+    def __init__(self, install:str|dict=None, force_kill:bool=True) -> None:
+        if (modules := self.find_missing(install)): # if modules are missing
+            if self.show_cli(modules): # and if the user agrees
+                self.install_cli(modules) # install missing modules from pip
+            if force_kill:
+                raise SystemExit
 
-    subprocess.run([sys.executable, '-m', 'pip', 'install'] + modules)
-    print()
-    print("DONE. Restart required.")
-    input("press enter to complete")
-    sys.exit()
+    def show_cli(self, modules:list):
+        print("MISSING MODULES")
+        print("The following modules are missing:\n")
+        print(modules)
+        print("\nWould you like to install them now? [no]/yes")
+        return input().lower().startswith('y')
 
-def _install_gui(modules:list):
-    from subprocess import Popen, PIPE
-    import sys
-    import threading
-    import tkinter as tk
-    from tkinter import ttk
-    from tkinter.scrolledtext import ScrolledText
+    def install_cli(self, modules:list):
+        import subprocess
+        import sys
 
-    def pipe_reader(pipe, term=False):
-        for line in iter(pipe.readline, b''):
-            st.insert(tk.END, line)
-            st.see(tk.END)
-        if term:
-            tk.Label(root, fg='red', text="DONE. Restart required.", font=('bold',14)).pack()
-            ttk.Button(root, text="Exit program", command=sys.exit).pack()
-    def on_closing(*args):
-        print(args)
-        root.destroy()
-        root.quit()
+        subprocess.run([sys.executable, '-m', 'pip', 'install'] + modules)
+        print()
+        print("DONE. Restart required.")
+        input("press enter to complete")
         sys.exit()
 
-    root = tk.Tk()
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-    tk.Label(root, text=f'Installing: {", ".join(modules)}', font=('bold',14)).pack()
-    st= ScrolledText(root, width=60, height=12)
-    st.pack(expand=True, fill=tk.BOTH)
-    sub_proc = Popen([sys.executable, '-m', 'pip', 'install'] + modules, stdout=PIPE, stderr=PIPE)
-    threading.Thread(target=pipe_reader, args=[sub_proc.stdout]).start()
-    threading.Thread(target=pipe_reader, args=[sub_proc.stderr, True]).start()
-    root.mainloop()
-
+def cli_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
+    """
+    checks if the given modules are installed or not
+    prompts the user to install them if they are not
+    """
+    ModuleInstallerCLI(install, force_kill)
+    
+def gui_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
+    """
+    checks if the given modules are installed or not
+    shows GUI prompt to install them if they are not
+    """
+    ModuleInstallerGUI(install, force_kill)
+    
 def test():
-    # ~ gui_check_and_prompt({"PIL":"pillow"})
-    gui_check_and_prompt({"serial":"pyserial"})
-    print(_find_missing_via_pip("pyserial pillow openpyxl==2.2"))
+    ModuleInstallerGUI({"pandas":"pillow"})
+    # ~ ModuleInstallerCLI({"pandas":"pillow"})
+    # ~ gui_check_and_prompt({"serial":"pyserial"})
+    # ~ print(find_missing_via_pip("pyserial pillow openpyxl==2.2"))
 
 if __name__ == "__main__":
     test()
