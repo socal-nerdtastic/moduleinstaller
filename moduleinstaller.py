@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# see https://github.com/socal-nerdtastic/moduleinstaller for definitive version
+
 """
 packages are in the format {importname:installname}.
 These are often the same name, but sometimes not.
@@ -17,6 +19,7 @@ Save this python file into your project folder. Then add this code to your main 
 
     import moduleinstaller
     moduleinstaller.gui_check_and_prompt({"PIL":"pillow", "pyopenxl":"pyopenxl"})
+
 This is required for GUI programs that don't have a CLI at all
 But is also allowed for CLI programs that want a GUI prompt.
 
@@ -64,6 +67,7 @@ or
     moduleinstaller.cli_check_and_prompt("pyserial pillow openpyxl==2.2")
 
 """
+
 class ModuleInstallerCore:
     __version__ = 2024,5,8
 
@@ -178,14 +182,14 @@ def cli_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
     prompts the user to install them if they are not
     """
     ModuleInstallerCLI(install, force_kill)
-    
+
 def gui_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
     """
     checks if the given modules are installed or not
     shows GUI prompt to install them if they are not
     """
     ModuleInstallerGUI(install, force_kill)
-    
+
 def test():
     ModuleInstallerGUI({"pandas":"pillow"})
     # ~ ModuleInstallerCLI({"pandas":"pillow"})
