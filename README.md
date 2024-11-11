@@ -5,13 +5,13 @@ Prompt user to install missing python modules from pip. This module will check i
 Save this python file into your project folder. Then add this code to your main program:
 
     import moduleinstaller
-    moduleinstaller.cli_check_and_prompt({"PIL":"pillow", "pyopenxl":"pyopenxl"})
+    moduleinstaller.cli_check_and_prompt({"PIL":"pillow", "openpyxl":"openpyxl"})
 
 ## HOW TO USE for GUI programs:
 Save this python file into your project folder. Then add this code to your main program:
 
     import moduleinstaller
-    moduleinstaller.gui_check_and_prompt({"PIL":"pillow", "pyopenxl":"pyopenxl"})
+    moduleinstaller.gui_check_and_prompt({"PIL":"pillow", "openpyxl":"openpyxl"})
 
 This is required for GUI programs that don't have a CLI at all
 But is also allowed for CLI programs that want a GUI prompt.
