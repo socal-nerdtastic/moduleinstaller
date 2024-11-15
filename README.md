@@ -1,5 +1,5 @@
 # moduleinstaller
-Prompt user to install missing python modules from pip. This module will check if the user has requirements installed. If not it will prompt the user to install them. 
+Prompt user to install missing python modules from pip. This module will check if the user has requirements installed. If not it will prompt the user to install them.
 
 ## HOW TO USE for command-line programs:
 Save this python file into your project folder. Then add this code to your main program:
@@ -16,11 +16,11 @@ Save this python file into your project folder. Then add this code to your main 
 This is required for GUI programs that don't have a CLI at all
 But is also allowed for CLI programs that want a GUI prompt.
 
-## Extra arguments: 
-The force_kill argument will force a reboot if any modules are missing:  
-False = allow program to continue, whether or not modules are missing  
-True = kill the program if any modules are missing, whether or not the user opts to install them (default)  
-None = kill the program only if the user declines to install missing modules  
+## Extra arguments:
+The force_kill argument sets what happens if modules are missing, after moduleinstaller is finished:
+None (default) = kill the main program only if the user declines to install missing modules
+True = kill the main program, whether or not the user opts to install missing modules
+False = allow main program to continue, whether or not the user opts to install missing modules
 
 ## ALTERNATE USE:
 pass in a string of modules to be installed, or leave
@@ -46,9 +46,9 @@ You can get the speed advantage back if you wrap your attempted import
 
 ## Notes
 
-packages are in the format {importname:installname}. These are often the same name, but sometimes not. 
+packages are in the format {importname:installname}. These are often the same name, but sometimes not.
 
-If you want to keep your code in a single file (sometimes you make monsters; I get it) you can copy the code to the top of your file instead of importing from another file. 
+If you want to keep your code in a single file (sometimes you make monsters; I get it) you can copy the classes to the top of your file instead of importing
 
 Normal pip versioning strings can be used. For example
 

@@ -10,7 +10,7 @@ HOW TO USE for command-line programs:
 Save this python file into your project folder. Then add this code to your main program:
 
     import moduleinstaller
-    moduleinstaller.cli_check_and_prompt({"PIL":"pillow", "pyopenxl":"pyopenxl"})
+    moduleinstaller.cli_check_and_prompt({"PIL":"pillow", "openpyxl":"openpyxl"})
 
 ---
 
@@ -18,7 +18,7 @@ HOW TO USE for GUI programs:
 Save this python file into your project folder. Then add this code to your main program:
 
     import moduleinstaller
-    moduleinstaller.gui_check_and_prompt({"PIL":"pillow", "pyopenxl":"pyopenxl"})
+    moduleinstaller.gui_check_and_prompt({"PIL":"pillow", "openpyxl":"openpyxl"})
 
 This is required for GUI programs that don't have a CLI at all
 But is also allowed for CLI programs that want a GUI prompt.
@@ -49,10 +49,10 @@ You can get the speed advantage back if you wrap your attempted import
 
 ---
 
-The force_kill argument will force a reboot if any modules are missing,
-False = allow program to continue, whether or not modules are missing
-True = kill the program if any modules are missing, whether or not the user opts to install them (default)
-None = kill the program only if the user declines to install missing modules
+The force_kill argument sets what happens if modules are missing, after moduleinstaller is finished:
+None (default) = kill the main program only if the user declines to install missing modules
+True = kill the main program, whether or not the user opts to install missing modules
+False = allow main program to continue, whether or not the user opts to install missing modules
 
 ---
 
@@ -69,9 +69,18 @@ or
 """
 
 class ModuleInstallerCore:
-    __version__ = 2024,5,8
+    __version__ = 2024,11,15
+    def __init__(self, install:str|dict=None, force_kill:bool=None) -> None:
+        if (modules := self.find_missing(install)): # if modules are missing
+            modulenames = ", ".join(repr(importname) if importname==installname else f"{importname!r}({installname})" for importname, installname in modules.items())
+            if self.promt_user(modulenames): # if the user agrees
+                self.run_pip(list(modules.values()), force_kill) # install missing modules from pip
+            elif force_kill is None: # user declined to install
+                raise SystemExit
+            if force_kill:
+                raise SystemExit
 
-    def find_missing(self, install:str|dict=None):
+    def find_missing(self, install:str|dict=None) -> dict:
         if isinstance(install, dict):
             return self.find_missing_via_imports(install)
         else: # string, None, or Path
@@ -81,7 +90,7 @@ class ModuleInstallerCore:
         import subprocess
         import sys
         from pathlib import Path
-        to_be_installed = []
+        to_be_installed = {}
         if install is None:
             req = Path(__file__).parent / "requirements.txt"
             if req.exists():
@@ -92,35 +101,29 @@ class ModuleInstallerCore:
         installed = resp.stdout.decode().splitlines()
         for modulename in install.strip().split():
             if not any(line.startswith(modulename) for line in installed):
-                to_be_installed.append(modulename)
+                to_be_installed[modulename] = modulename
         return to_be_installed
 
     def find_missing_via_imports(self, install:dict) -> dict:
         # install is a dict of  {importname:installname}
-        to_be_installed = []
+        to_be_installed = {}
         for importname, installname in install.items():
             try:
                 __import__(importname)
             except (ImportError, ModuleNotFoundError):
-                to_be_installed.append(installname)
+                to_be_installed[importname] = installname
         return to_be_installed
 
 class ModuleInstallerGUI(ModuleInstallerCore):
-    def __init__(self, install:str|dict=None, force_kill:bool=True) -> None:
-        if (modules := self.find_missing(install)): # if modules are missing
-            if self.show_gui(modules): # and if the user agrees
-                self.install_gui(modules) # install missing modules from pip
-            if force_kill:
-                raise SystemExit
-
-    def show_gui(self, modules:list):
+    def promt_user(self, modules:str):
         from tkinter import messagebox
         return messagebox.askyesno(
             "Missing modules", # window title
-            f"The following modules are missing:\n\n"
-            f"{modules}\n\nWould you like to install them now?")
+            f"The following modules are missing:\n"
+            f'  {modules}\n'
+            f"\nWould you like to install them now?")
 
-    def install_gui(self, modules:list):
+    def run_pip(self, modules:list, force_kill:bool=None):
         from subprocess import Popen, PIPE
         import sys
         import threading
@@ -133,57 +136,59 @@ class ModuleInstallerGUI(ModuleInstallerCore):
                 st.insert(tk.END, line)
                 st.see(tk.END)
             if term:
-                tk.Label(root, fg='red', text="DONE. Restart required.", font=('bold',14)).pack()
-                ttk.Button(root, text="Exit program", command=sys.exit).pack()
+                root.install_done = True
+                if force_kill:
+                    tk.Label(root, fg='red', text="DONE. Restart required.", font=('bold',14)).pack()
+                    ttk.Button(root, text="Exit program", command=on_closing).pack()
+                else:
+                    tk.Label(root, fg='red', text="INSTALL FINISHED", font=('bold',14)).pack()
+                    ttk.Button(root, text="Continue", command=on_closing).pack()
+
         def on_closing(*args):
-            print(args)
             root.destroy()
             root.quit()
-            sys.exit()
+            if not root.install_done:
+                raise SystemExit # kill the main program if the install is interupted.
 
         root = tk.Tk()
         root.protocol("WM_DELETE_WINDOW", on_closing)
+        root.install_done = False
         tk.Label(root, text=f'Installing: {", ".join(modules)}', font=('bold',14)).pack()
         st= ScrolledText(root, width=60, height=12)
         st.pack(expand=True, fill=tk.BOTH)
         sub_proc = Popen([sys.executable, '-m', 'pip', 'install'] + modules, stdout=PIPE, stderr=PIPE)
-        threading.Thread(target=pipe_reader, args=[sub_proc.stdout]).start()
-        threading.Thread(target=pipe_reader, args=[sub_proc.stderr, True]).start()
+        threading.Thread(target=pipe_reader, args=[sub_proc.stdout], daemon=True).start()
+        threading.Thread(target=pipe_reader, args=[sub_proc.stderr, True], daemon=True).start()
         root.mainloop()
 
 class ModuleInstallerCLI(ModuleInstallerCore):
-    def __init__(self, install:str|dict=None, force_kill:bool=True) -> None:
-        if (modules := self.find_missing(install)): # if modules are missing
-            if self.show_cli(modules): # and if the user agrees
-                self.install_cli(modules) # install missing modules from pip
-            if force_kill:
-                raise SystemExit
-
-    def show_cli(self, modules:list):
+    def promt_user(self, modules:str):
         print("MISSING MODULES")
-        print("The following modules are missing:\n")
-        print(modules)
+        print("The following modules are missing:")
+        print(" ", modules)
         print("\nWould you like to install them now? [no]/yes")
         return input().lower().startswith('y')
 
-    def install_cli(self, modules:list):
+    def run_pip(self, modules:list, force_kill:bool=None):
         import subprocess
         import sys
 
         subprocess.run([sys.executable, '-m', 'pip', 'install'] + modules)
         print()
-        print("DONE. Restart required.")
-        input("press enter to complete")
-        sys.exit()
+        if force_kill:
+            print("DONE. Restart required.")
+            input("press enter to complete")
+        else:
+            print("INSTALL FINISHED")
 
-def cli_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
+def cli_check_and_prompt(install:str|dict=None, force_kill:bool=None) -> None:
     """
     checks if the given modules are installed or not
     prompts the user to install them if they are not
     """
     ModuleInstallerCLI(install, force_kill)
 
-def gui_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
+def gui_check_and_prompt(install:str|dict=None, force_kill:bool=None) -> None:
     """
     checks if the given modules are installed or not
     shows GUI prompt to install them if they are not
@@ -191,10 +196,8 @@ def gui_check_and_prompt(install:str|dict=None, force_kill:bool=True) -> None:
     ModuleInstallerGUI(install, force_kill)
 
 def test():
-    ModuleInstallerGUI({"pandas":"pillow"})
-    # ~ ModuleInstallerCLI({"pandas":"pillow"})
-    # ~ gui_check_and_prompt({"serial":"pyserial"})
-    # ~ print(find_missing_via_pip("pyserial pillow openpyxl==2.2"))
+    gui_check_and_prompt({"bogusmodule":"pillow"}, force_kill=False)
+    cli_check_and_prompt({"pandas":"pillow","bogusmod":"bogusmod",})
 
 if __name__ == "__main__":
     test()
