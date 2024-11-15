@@ -17,10 +17,10 @@ This is required for GUI programs that don't have a CLI at all
 But is also allowed for CLI programs that want a GUI prompt.
 
 ## Extra arguments:
-The force_kill argument sets what happens if modules are missing, after moduleinstaller is finished:
-None (default) = kill the main program only if the user declines to install missing modules
-True = kill the main program, whether or not the user opts to install missing modules
-False = allow main program to continue, whether or not the user opts to install missing modules
+The force_kill argument sets what happens if modules are missing, after moduleinstaller is finished:  
+None (default) = kill the main program only if the user declines to install missing modules  
+True = kill the main program, whether or not the user opts to install missing modules  
+False = allow main program to continue, whether or not the user opts to install missing modules  
 
 ## ALTERNATE USE:
 pass in a string of modules to be installed, or leave
